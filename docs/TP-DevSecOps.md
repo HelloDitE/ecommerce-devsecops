@@ -17,7 +17,7 @@ Le système complet est conçu autour de 3 services. Pour ce rendu, le développ
 1.  **Gateway (Port 80/443) :**
     * **Rôle :** Point d'entrée unique (Reverse Proxy). Il route les requêtes vers les bons services et protège l'accès direct aux conteneurs.
     * **Techno :** Nginx.
-2.  **Catalog Service (Interne : 5000) - *Focus du TP* :**
+2.  **Catalog Service (Interne : 5000) :**
     * **Rôle :** Gestion de l'inventaire des livres et moteur de recherche.
     * **Techno :** **Python / Flask** (Choisi pour la démonstration des vulnérabilités SAST/DAST).
     * **Base de données :** SQLite (embarquée pour le prototypage).
