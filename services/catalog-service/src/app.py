@@ -9,6 +9,10 @@ app = Flask(__name__)
 # Si la variable n'existe pas (dev local), on utilise une clé par défaut.
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "default-dev-key")
 
+@app.route("/")
+def index():
+    return render_template("index.html")
+
 @app.route("/health")
 def health():
     return {"status": "ok"}

@@ -11,6 +11,19 @@ services:
       retries: 3
     networks:
       - devsecops-net
+  auth-service:
+      build: ./services/auth-service
+      ports:
+        - "5001:5000" # Attention au port : 5001
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+
+  order-service:
+      build: ./services/order-service
+      ports:
+        - "5002:5000" # Attention au port : 5002
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
 
 networks:
   devsecops-net:
