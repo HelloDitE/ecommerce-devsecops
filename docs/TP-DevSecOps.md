@@ -9,24 +9,22 @@
 
 ### Description Générale
 L'application est une plateforme e-commerce de vente de livres. Elle repose sur une architecture **microservices** où chaque fonctionnalité métier est isolée.
-Pour ce TP, conformément aux consignes, nous nous sommes concentrés sur l'implémentation technique et la sécurisation du service critique : le **Catalog Service**.
+Le service Catalog (Flask) agit comme point d'entrée principal.
 
 ### Microservices et Rôles
 Le système complet est conçu autour de 3 services. Pour ce rendu, le développement actif est sur le Catalogue (Python).
 
-1.  **Gateway (Port 80/443) :**
-    * **Rôle :** Point d'entrée unique (Reverse Proxy). Il route les requêtes vers les bons services et protège l'accès direct aux conteneurs.
-    * **Techno :** Nginx.
-2.  **Catalog Service (Interne : 5000) :**
-    * **Rôle :** Gestion de l'inventaire des livres et moteur de recherche.
+1.  **Catalog Service (Interne : 5000) :**
+    * **Rôle :** Point d'entrée de l'application et gestion de l'inventaire des livres.
     * **Techno :** **Python / Flask** (Choisi pour la démonstration des vulnérabilités SAST/DAST).
+    * **Fonction Gateway :** Il expose directement les API REST aux clients et intègre la logique métier.
     * **Base de données :** SQLite (embarquée pour le prototypage).
-3.  **Auth Service & Order Service (Architecture Cible) :**
-    * **Rôle :** Gestion des utilisateurs (JWT) et des paniers.
-    * **Techno :** Node.js (Prévus dans la roadmap, simulés pour l'instant).
+2.  **Auth Service & Order Service (Architecture Cible) :**
+    * **Rôle :** Services tiers (Authentification et Commandes).
+    * **Techno :** Node.js
 
 ### Points d'entrée exposés (Surface d'attaque)
-Voici les routes API définies dans notre service Catalogue actuel, accessibles via la Gateway ou directement en interne :
+Le service Flask est exposé directement sur le port 5000.
 
 | Route Publique | Méthode | Description | Auth Requise ? | Risque Identifié |
 | :--- | :--- | :--- | :--- | :--- |
@@ -36,9 +34,8 @@ Voici les routes API définies dans notre service Catalogue actuel, accessibles 
 | `/discount` | POST | Calcul de réduction | Non | Moyen (Bug logique / Déni de service) |
 
 ### Flux de Données Sensibles
-* **Secrets d'API :** Des clés de configuration (`SECRET_KEY`) et des tokens d'administration (`ADMIN_TOKEN`) sont présents dans le code source (détectables par Secret Scanning).
-* **Commandes Système :** Le service Catalogue expose par erreur une route (`/debug/run`) permettant d'exécuter des commandes arbitraires sur le serveur, créant un risque majeur de prise de contrôle du conteneur.
-* **Données Métier :** Les informations produits (Prix, Titres) sont exposées publiquement.
+* **Secrets d'API :** Tokens et clés (SECRET_KEY) présents en dur dans le code Flask.
+* **Commandes Système :** Exécution arbitraire possible via la route /debug/run exposée publiquement par le service Flask.
 
 ### Dépendances Critiques
 L'analyse des risques (SCA - Software Composition Analysis) se porte sur ces composants :

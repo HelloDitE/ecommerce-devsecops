@@ -12,8 +12,5 @@ services:
     networks:
       - devsecops-net
 
-  # Tu pourras ajouter auth-service et order-service ici plus tard
-  # Pour l'instant, seul le catalog est exigé "vulnérable"
-
 networks:
   devsecops-net:
