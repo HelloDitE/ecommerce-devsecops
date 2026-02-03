@@ -45,7 +45,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true # On laisse passer pour le TP (pour voir les rapports)
+        continue-on-error: false
 
       # SCANNER 2 : Semgrep (Analyse de code SAST)
       # Il va trouver l'injection SQL et Command Injection
@@ -53,7 +53,7 @@ jobs:
         uses: semgrep/semgrep-action@v1
         with:
           config: p/python # Règles standards pour Python
-        continue-on-error: true
+        continue-on-error: false
 
   # JOB 3 : Build, Staging & DAST
   # Scanners : Trivy (Image Docker) et ZAP (Site en ligne)
@@ -74,7 +74,7 @@ jobs:
         with:
           image-ref: 'ecommerce-devsecops-catalog-service:latest'
           format: 'table'
-          exit-code: '0' # Mettre '1' pour bloquer si failles critiques
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
