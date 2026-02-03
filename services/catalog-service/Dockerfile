@@ -1,18 +1,19 @@
-# Etape 1 : Build (On installe tout pour construire)
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-# On lance les tests ici ou dans le pipeline
-# RUN npm test 
+# Image légère Python (et non plus Node)
+FROM python:3.11-slim
 
-# Etape 2 : Run (On ne garde que le strict minimum pour la prod)
-FROM node:18-alpine
 WORKDIR /app
-# On copie seulement les fichiers nécessaires depuis l'étape 1
-COPY --from=builder /app .
-# On utilise un utilisateur non-root (Sécurité !)
-USER node
-EXPOSE 3000
-CMD ["npm", "start"]
+
+# Installation des dépendances Python
+# On copie requirements.txt (que tu as créé juste avant)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copie du code source
+# Attention : on copie le contenu du dossier src/ dans le dossier courant /app
+COPY src/ .
+
+# Port standard Flask
+EXPOSE 5000
+
+# Lancement du serveur Python
+CMD ["python", "app.py"]
