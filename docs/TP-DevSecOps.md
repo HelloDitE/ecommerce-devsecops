@@ -1,52 +1,52 @@
 # TP DevSecOps - Projet "BookStore Secure"
 
-**Membres du groupe :** [Ton Nom], [Nom Camarade]
-**Lien du dépôt :** [Lien GitHub]
+**Membres du groupe :** Gautier Klara, Eloire Elodie
+**Lien du dépôt :** https://github.com/HelloDitE/ecommerce-devsecops.git
 
 ---
 
 ## 1. Architecture Applicative
 
 ### Description Générale
-L'application est une plateforme e-commerce simplifiée de vente de livres. Elle suit une architecture microservices conteneurisée, exposée via une API Gateway unique.
+L'application est une plateforme e-commerce de vente de livres. Elle repose sur une architecture **microservices** où chaque fonctionnalité métier est isolée.
+Pour ce TP, conformément aux consignes, nous nous sommes concentrés sur l'implémentation technique et la sécurisation du service critique : le **Catalog Service**.
 
 ### Microservices et Rôles
-Le système est composé de 3 services principaux communiquant en HTTP/REST :
+Le système complet est conçu autour de 3 services. Pour ce rendu, le développement actif est sur le Catalogue (Python).
 
 1.  **Gateway (Port 80/443) :**
-    * **Rôle :** Point d'entrée unique (Reverse Proxy). Gère le routage vers les services internes.
+    * **Rôle :** Point d'entrée unique (Reverse Proxy). Il route les requêtes vers les bons services et protège l'accès direct aux conteneurs.
     * **Techno :** Nginx.
-2.  **Auth Service (Interne : 3001) :**
-    * **Rôle :** Gestion des utilisateurs (inscription/connexion) et délivrance des tokens JWT.
-    * **Techno :** Node.js / Express.
-3.  **Catalog Service (Interne : 3002) :**
-    * **Rôle :** Gestion de l'inventaire des livres (Lecture seule publique, écriture admin).
-    * **Techno :** Node.js / Express.
-4.  **Order Service (Interne : 3003) :**
-    * **Rôle :** Simulation de passage de commande (Validation panier).
-    * **Techno :** Node.js / Express.
+2.  **Catalog Service (Interne : 5000) - *Focus du TP* :**
+    * **Rôle :** Gestion de l'inventaire des livres et moteur de recherche.
+    * **Techno :** **Python / Flask** (Choisi pour la démonstration des vulnérabilités SAST/DAST).
+    * **Base de données :** SQLite (embarquée pour le prototypage).
+3.  **Auth Service & Order Service (Architecture Cible) :**
+    * **Rôle :** Gestion des utilisateurs (JWT) et des paniers.
+    * **Techno :** Node.js (Prévus dans la roadmap, simulés pour l'instant).
 
 ### Points d'entrée exposés (Surface d'attaque)
-Seul le port de la Gateway est exposé à Internet.
+Voici les routes API définies dans notre service Catalogue actuel, accessibles via la Gateway ou directement en interne :
 
-| Route Publique | Méthode | Service Cible | Description | Auth Requise ? |
+| Route Publique | Méthode | Description | Auth Requise ? | Risque Identifié |
 | :--- | :--- | :--- | :--- | :--- |
-| `/api/auth/login` | POST | Auth Service | Connexion utilisateur | Non |
-| `/api/books` | GET | Catalog Service | Liste des livres | Non |
-| `/api/orders` | POST | Order Service | Créer une commande | Oui (Token JWT) |
-| `/health` | GET | Tous | Vérification état | Non |
+| `/health` | GET | Vérification de l'état du service (Healthcheck) | Non | Faible |
+| `/search?q=...` | GET | Recherche de livres | Non | **Critique** (Injection SQL possible) |
+| `/debug/run` | GET | Interface admin de debug | Non | **Critique** (RCE - Command Injection) |
+| `/discount` | POST | Calcul de réduction | Non | Moyen (Bug logique / Déni de service) |
 
 ### Flux de Données Sensibles
-* **Identifiants (Credentials) :** Transmis en HTTPS (idéalement) vers `/auth/login`. Stockés hachés dans la DB Auth.
-* **Tokens (JWT) :** Transmis dans les headers HTTP `Authorization: Bearer ...` pour chaque requête authentifiée.
-* **Données Personnelles (PII) :** Adresse de livraison envoyée au service Order lors de la commande.
+* **Secrets d'API :** Des clés de configuration (`SECRET_KEY`) et des tokens d'administration (`ADMIN_TOKEN`) sont présents dans le code source (détectables par Secret Scanning).
+* **Commandes Système :** Le service Catalogue expose par erreur une route (`/debug/run`) permettant d'exécuter des commandes arbitraires sur le serveur, créant un risque majeur de prise de contrôle du conteneur.
+* **Données Métier :** Les informations produits (Prix, Titres) sont exposées publiquement.
 
 ### Dépendances Critiques
-* **Images Docker de base :** `node:18-alpine` (OS minimal pour réduire la surface d'attaque), `nginx:alpine`.
-* **Bibliothèques Tierces (Node.js) :**
-    * `express` (Framework Web)
-    * `jsonwebtoken` (Gestion Auth)
-    * `pg` (Driver Base de données - *simulé pour ce TP*)
-* **Infrastructure :** Docker & Docker Compose.
+L'analyse des risques (SCA - Software Composition Analysis) se porte sur ces composants :
+
+* **Image Docker de base :** `python:3.11-slim` (Version Debian allégée).
+* **Bibliothèques Python (requirements.txt) :**
+    * `flask` (Framework Web)
+    * `requests` (Appels HTTP)
+* **Infrastructure :** Docker Compose pour l'orchestration locale et Staging.
 
 ---
