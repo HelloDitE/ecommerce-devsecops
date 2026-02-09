@@ -37,21 +37,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: false
 
-      # 2. SEMGREP (Code)
+      # 2. SEMGREP (Code) - Version Corrigée
       - name: Semgrep Code Scan
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: p/python
-          generateSarif: "semgrep.sarif"
+        run: |
+          pip install semgrep
+          semgrep scan --config=p/python --json --output=semgrep.json
         continue-on-error: false
 
-      # Sauvegarde Artefact Semgrep
+      # Sauvegarde Artefact Semgrep (Format JSON cette fois)
       - name: Upload Semgrep Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: semgrep-report
-          path: semgrep.sarif
+          path: semgrep.json
 
   # JOB 3 : Build, Staging & DAST
   deploy-staging-and-scan:

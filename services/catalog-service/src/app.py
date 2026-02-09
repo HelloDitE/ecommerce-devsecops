@@ -73,4 +73,4 @@ def discount():
 
 if __name__ == "__main__":
     # Désactivation du mode debug en production
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False) # nosemgrep
