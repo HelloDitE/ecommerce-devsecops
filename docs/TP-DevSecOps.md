@@ -21,7 +21,7 @@ Le système complet est conçu autour de 3 services. Pour ce rendu, le développ
     * **Base de données :** SQLite (embarquée pour le prototypage).
 2.  **Auth Service & Order Service (Architecture Cible) :**
     * **Rôle :** Services tiers (Authentification et Commandes).
-    * **Techno :** Node.js
+    * **Techno :** Flask
 
 ### Points d'entrée exposés (Surface d'attaque)
 Le service Flask est exposé directement sur le port 5000.
@@ -115,3 +115,78 @@ L'automatisation ne couvre pas 100% des risques. Voici les limites identifiées 
 | **Couverture du DAST (ZAP)** | Le scanner dynamique (ZAP) ne teste que les liens qu'il trouve. Si la route `/debug/run` n'est référencée nulle part dans le HTML, il ne la testera pas. | Fournir une **spécification OpenAPI (Swagger)** au scanner ou maintenir une liste exhaustive des routes à tester dans le script de supervision. |
 
 ---
+
+
+## 5. Configuration Technique des Gates (Barrières)
+
+Pour respecter la consigne d'automatisation, nous avons configuré nos scanners dans GitHub Actions pour qu'ils agissent comme des barrières (**Gates**).
+
+Nous avons défini deux comportements :
+* **Bloquant (🔴) :** Si une faille critique est trouvée, le pipeline s'arrête (Exit Code 1) et empêche la suite.
+* **Informatif (🟠) :** Le scanner signale des alertes mais laisse passer le pipeline (pour éviter de bloquer sur des faux positifs).
+
+Voici le résumé de notre configuration :
+
+| Outil | Type | Configuration de la Gate | Preuve (Artefact généré) |
+| :--- | :--- | :--- | :--- |
+| **Gitleaks** | Secret Scanning | **Bloquant 🔴** <br> Analyse chaque commit. S'arrête net si un mot de passe ou une clé API est détecté. | Logs de la console GitHub (onglet Actions). |
+| **Semgrep** | SAST (Code) | **Bloquant 🔴** <br> Analyse le code Python. Nous avons dû ignorer l'alerte sur l'écoute `0.0.0.0` (nécessaire pour Docker) via le commentaire `# nosemgrep`. | `semgrep.json` |
+| **Trivy** | Conteneur | **Bloquant 🔴** <br> Scanne l'image Docker finale. Configure pour bloquer uniquement sur les failles `CRITICAL` afin de ne pas être bloqué par des mises à jour mineures de l'OS. | `trivy-report.json` |
+| **OWASP ZAP** | DAST (Web) | **Informatif 🟠** <br> Scanne le site en fonctionnement (Staging). Configuré en mode "Baseline" pour générer un rapport sans casser le pipeline, car cet outil génère souvent des fausses alertes. | `zap-scan-report` (HTML) |
+
+---
+
+## 6. Guide de déploiement et supervision
+
+L'objectif est que n'importe qui puisse lancer le projet sans connaître le code. Tout est conteneurisé avec Docker.
+
+### Pré-requis
+* Avoir `git` installé.
+* Avoir `Docker Desktop` installé et lancé.
+
+### Procédure de lancement (Local)
+1.  **Récupérer le projet :**
+    ```bash
+    git clone [https://github.com/HelloDitE/ecommerce-devsecops.git](https://github.com/HelloDitE/ecommerce-devsecops.git)
+    cd ecommerce-devsecops
+    ```
+
+2.  **Lancer l'environnement complet :**
+    Nous utilisons un fichier Compose qui lance les 3 services (Catalog, Auth, Order) et le Frontend.
+    ```bash
+    docker compose -f compose.staging.yml up --build -d
+    ```
+
+3.  **Accéder à l'application :**
+    Ouvrez votre navigateur sur : [http://localhost:5000](http://localhost:5000)
+
+### Supervision
+Pour vérifier que l'application est en bonne santé une fois lancée, nous utilisons des scripts de "Smoke Test" (Tests de fumée) :
+
+* **Vérification automatique :** Le script `monitoring/supervision.sh` interroge les endpoints `/health` de nos services.
+    ```bash
+    bash monitoring/supervision.sh
+    ```
+* **Résultat attendu :** Le script doit afficher "OK" pour chaque service. Si un service est KO, le code de retour HTTP sera différent de 200.
+
+---
+
+## 7. Retour d'expérience (REX)
+
+Ce projet nous a permis de mettre en pratique l'approche **DevSecOps** : intégrer la sécurité dès le développement plutôt que d'attendre la fin du projet.
+
+### Ce qui a bien fonctionné
+* **L'automatisation :** C'est très satisfaisant de voir GitHub Actions lancer tout seul les tests, la construction de l'image Docker et les scans de sécurité à chaque `git push`.
+* **La détection précoce :** Les outils comme **Semgrep** et **Gitleaks** sont très efficaces. Ils nous ont permis de voir immédiatement nos erreurs (injections SQL, secrets oubliés) avant même de déployer.
+* **La portabilité :** Grâce à Docker, le projet tourne exactement de la même façon sur nos machines et sur le serveur d'intégration continue (CI).
+
+### Les difficultés rencontrées
+* **La syntaxe YAML :** Configurer le pipeline `.github/workflows/ci.yml` a été l'étape la plus chronophage. La moindre erreur d'indentation (espace en trop) faisait échouer le pipeline, ce qui a demandé beaucoup d'essais/erreurs.
+* **La gestion des Faux Positifs :** Les scanners de sécurité sont parfois trop stricts. Par exemple, Semgrep refusait que notre application écoute sur toutes les interfaces (`0.0.0.0`), ce qui est pourtant obligatoire dans un conteneur Docker. Nous avons appris à gérer ces exceptions proprement.
+* **Comprendre les outils :** Au début, la différence entre l'analyse statique (SAST) et dynamique (DAST) n'était pas claire, mais la mise en place de Semgrep (sur le code) et ZAP (sur le site lancé) a concrétisé ces notions.
+
+### Améliorations possibles
+Si nous avions plus de temps, nous pourrions :
+* [cite_start]Ajouter des **notifications automatiques** (sur Slack ou Teams) quand le pipeline échoue[cite: 229].
+* [cite_start]Mettre en place la **signature des images Docker** (avec Cosign) pour garantir que personne ne modifie notre code entre le build et la production[cite: 227].
+* Passer les échanges en **HTTPS** (actuellement en HTTP) pour sécuriser les données des clients.
