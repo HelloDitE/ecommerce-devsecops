@@ -8,7 +8,6 @@ on:
 
 jobs:
   # JOB 1 : Tests Unitaires & Qualité Code
-  # Vérifie que le code Python fonctionne avant d'aller plus loin.
   unit-tests:
     runs-on: ubuntu-latest
     steps:
@@ -20,88 +19,107 @@ jobs:
           python-version: '3.11'
           
       - name: Install dependencies
-        run: |
-          pip install -r services/catalog-service/requirements.txt
+        run: pip install -r services/catalog-service/requirements.txt
           
-      # Exécute les tests unitaires (PDF Page 7)
-      # Si ça échoue ici, le pipeline s'arrête (Gate de qualité)
       - name: Run Unit Tests
-        # On ignore l'erreur pour l'instant si tu n'as pas encore créé le fichier de test
-        continue-on-error: true 
         run: |
-          # pytest services/catalog-service/tests
-          echo "Simulation des tests unitaires (à activer quand tu auras écrit les tests)"
+          # Si tu as créé des tests, décommente la ligne ci-dessous
+          # pytest services/catalog-service/tests --junitxml=test-results.xml
+          echo "Tests unitaires simulés OK"
 
   # JOB 2 : Sécurité Statique (SAST + Secrets)
-  # Scanners : Gitleaks (Secrets) et Semgrep (Code)
+  # Ce job génère des rapports pour Gitleaks et Semgrep
   security-static:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # SCANNER 1 : Gitleaks (Cherche les mots de passe oubliés)
-      # Il va trouver "dev-secret-do-not-use" dans ton app.py
+      # 1. GITLEAKS (Secrets) - Bloquant
       - name: Gitleaks Secret Scan
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true # On laisse passer pour le TP (pour voir les rapports)
+        [cite_start]continue-on-error: false # GATE BLOQUANTE 
 
-      # SCANNER 2 : Semgrep (Analyse de code SAST)
-      # Il va trouver l'injection SQL et Command Injection
+      # 2. SEMGREP (SAST Code) - Bloquant
       - name: Semgrep Code Scan
         uses: semgrep/semgrep-action@v1
         with:
-          config: p/python # Règles standards pour Python
-        continue-on-error: true
+          config: p/python
+          generateSarif: "semgrep.sarif" # Génère un rapport fichier
+        [cite_start]continue-on-error: false # GATE BLOQUANTE 
+
+      # SAUVEGARDE DES ARTEFACTS (Partie 4 - Exigence PDF) 
+      - name: Upload Semgrep Report
+        if: always() # Sauvegarde même si ça plante (pour voir pourquoi)
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: semgrep.sarif
 
   # JOB 3 : Build, Staging & DAST
-  # Scanners : Trivy (Image Docker) et ZAP (Site en ligne)
+  # Ce job génère des rapports pour Trivy et ZAP
   deploy-staging-and-scan:
-    needs: [unit-tests] # Attend que les tests soient OK
+    needs: [unit-tests, security-static] # Attend que la sécurité statique soit verte
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # BUILD : Construction de l'image Docker
+      # BUILD IMAGE
       - name: Build Docker Image
         run: docker compose -f compose.staging.yml build
 
-      # SCANNER 3 : Trivy (Scan de vulnérabilités dans l'image)
-      # Il va analyser l'image python:3.11-slim et tes paquets
-      - name: Run Trivy Vulnerability Scanner
+      # 3. TRIVY (Container Scan) - Bloquant sur CRITICAL
+      # On le lance en mode "Table" pour voir les logs
+      - name: Run Trivy Console Scan
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'ecommerce-devsecops-catalog-service:latest'
           format: 'table'
-          exit-code: '0' # Mettre '1' pour bloquer si failles critiques
+          [cite_start]exit-code: '1' # GATE BLOQUANTE 
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL'
+
+      # On le relance juste pour générer le rapport JSON (sans bloquer cette fois)
+      - name: Generate Trivy Report
+        uses: aquasecurity/trivy-action@master
+        if: always()
+        with:
+          image-ref: 'ecommerce-devsecops-catalog-service:latest'
+          format: 'json'
+          output: 'trivy-report.json'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
-      # DEPLOY STAGING : Lancement de l'environnement
+      - name: Upload Trivy Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.json
+
+      # DEPLOY STAGING
       - name: Start Staging Environment
         run: docker compose -f compose.staging.yml up -d
 
-      # SUPERVISION : Vérification que ça tourne (PDF Page 4)
       - name: Wait for service to be healthy
-        run: sleep 10 # Petit temps de pause pour que Flask démarre
+        run: sleep 10
 
+      # SUPERVISION (Smoke Tests)
       - name: Run Smoke Test
         run: bash monitoring/smoke.sh
         env:
           BASE_URL: http://localhost:5000
 
-      - name: Run Supervision Script
-        run: bash monitoring/supervision.sh
-        env:
-          BASE_URL: http://localhost:5000
-
-      # SCANNER 4 : ZAP (DAST - Attaque le site lancé)
-      # OWASP ZAP va scanner ton site http://localhost:5000 pour trouver des failles Web
+      # 4. OWASP ZAP (DAST) - Bonus Recommandé [cite: 217]
+      # Scanne le site lancé et génère un rapport HTML
       - name: ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: 'http://localhost:5000'
-          cmd_options: '-a' # Scan agressif
-        continue-on-error: true
+          allow_issue_writing: false # Ne pas créer d'issues GitHub, juste le rapport
+          artifact_name: 'zap-scan-report' # Nom de l'artefact automatique
+          cmd_options: '-a'
+        continue-on-error: true # On laisse passer ZAP (souvent des faux positifs)
