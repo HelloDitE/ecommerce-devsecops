@@ -15,6 +15,7 @@ EXPOSE 5000
 
 # Création d'un utilisateur non-root pour la sécurité (Bonne pratique Docker)
 RUN useradd -m appuser
+RUN chown -R appuser:appuser /app
 USER appuser
 
 CMD ["python", "app.py"]

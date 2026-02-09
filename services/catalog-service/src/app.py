@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import sqlite3
 import os
 
@@ -15,7 +15,7 @@ def index():
 
 @app.route("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "catalog-service"}
 
 # CORRECTION 2 (Injection SQL) : 
 # Utilisation de "requêtes paramétrées". SQLite sépare le code des données.

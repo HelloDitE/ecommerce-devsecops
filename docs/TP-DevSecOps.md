@@ -83,3 +83,35 @@ Pour démontrer l'efficacité des gates de sécurité, nous maintenons deux bran
 | :--- | :--- | :--- | :--- |
 | **`vuln-demo`** | Contient des failles (Secret en dur, SQLi, RCE) | 🔴 **ÉCHEC** | Bloqué par Semgrep (RCE/SQLi) et Gitleaks (Secrets). Le code n'est pas déployé. |
 | **`main`** | Code corrigé et sécurisé | 🟢 **SUCCÈS** | Toutes les failles sont corrigées. Le code passe en staging et les tests ZAP sont exécutés. |
+
+
+---
+
+## 4. Analyse des risques (Mapping & Contrôles)
+
+Cette section identifie les menaces spécifiques pesant sur notre architecture microservices de librairie en ligne et définit les barrières automatisées (Gates) mises en place pour les contrer.
+
+### Tableau 1 : Mapping des Risques et Contrôles Automatisés
+
+| Risque | Exemple Concret dans le projet BookStore | Impact | Probabilité | Contrôle Automatisé (Outil) | Gate (Seuil de blocage) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Injection SQL** | L'endpoint `/search` concatène directement le paramètre `q` dans la requête SQL sans nettoyage. | **Critique** : Exfiltration de la base de données (clients, stocks, prix). | **Forte** (Code legacy fréquent) | **SAST** (Semgrep) | 🔴 Bloque si `findings > 0` |
+| **Injection de Commande (RCE)** | L'endpoint `/debug/run` utilise `subprocess` avec `shell=True`, permettant d'exécuter des commandes système sur le conteneur. | **Critique** : Prise de contrôle totale du serveur et accès au réseau Docker interne. | **Moyenne** (Oubli de route de debug) | **SAST** (Semgrep) | 🔴 Bloque si `findings > 0` |
+| **Secrets Committés** | Présence de `SECRET_KEY` ou de tokens API en dur dans le fichier `app.py`. | **Élevée** : Usurpation de session admin ou accès aux services tiers. | **Forte** (Erreur humaine fréquente) | **Secret Scanning** (Gitleaks) | 🔴 Bloque immédiatement |
+| **Bug Logique Métier** | L'endpoint `/discount` ne valide pas les pourcentages (ex: réduction > 100% ou négative) ou plante sur des variables non définies. | **Moyenne** : Perte financière (livres gratuits) ou crash du service (Déni de service). | **Moyenne** | **Tests Unitaires** (Pytest) | 🔴 Bloque si échec du test |
+| **Vulnérabilité Dépendance** | Utilisation d'une version obsolète de `Flask` ou `Requests` contenant des CVE connues. | **Moyenne/Élevée** : Risque d'exploitation publique si la faille est connue. | **Moyenne** | **SCA** (Trivy fs) | 🔴 Bloque si `CRITICAL` ou `HIGH` |
+| **Vulnérabilité Image Docker** | L'image de base `python:3.11-slim` peut contenir des failles système (paquets OS Debian). | **Moyenne** : Possibilité d'escalade de privilèges dans le conteneur. | **Moyenne** | **Container Scan** (Trivy image) | 🔴 Bloque si `CRITICAL` |
+| **Mauvaise Config Web** | Absence de headers de sécurité (HSTS, XSS-Protection) sur le serveur Flask exposé directement. | **Faible** : Attaques client-side (XSS, Clickjacking). | **Forte** (Config par défaut) | **DAST** (OWASP ZAP) | 🟠 Avertissement (Warn) |
+
+### Tableau 2 : Limites de l'automatisation et Mesures Compensatoires
+
+L'automatisation ne couvre pas 100% des risques. Voici les limites identifiées pour notre projet et comment nous les gérons par des processus humains.
+
+| Risque | Limite de l'outil (Point aveugle) | Mesure Compensatoire (Humain/Process) |
+| :--- | :--- | :--- |
+| **Logique Métier Complexe** | Les scanners (SAST/DAST) ne savent pas qu'une réduction de 200% sur un livre est "anormale". Ils cherchent des failles techniques, pas métier. | **Revue de code (Code Review)** systématique et écriture de scénarios de tests fonctionnels par les développeurs. |
+| **Faux Négatifs SAST** | Semgrep peut rater une injection SQL si la requête est construite de manière très complexe ou obscurcie. | **Pentest manuel** périodique et formation continue de l'équipe aux pratiques de codage sécurisé (Secure Coding). |
+| **Secrets Obfusqués** | Gitleaks ne détecte pas un secret s'il est découpé en plusieurs variables ou encodé (ex: base64) pour le cacher. | **Rotation régulière des clés** et interdiction stricte de committer des fichiers de configuration locale (`.env`). |
+| **Couverture du DAST (ZAP)** | Le scanner dynamique (ZAP) ne teste que les liens qu'il trouve. Si la route `/debug/run` n'est référencée nulle part dans le HTML, il ne la testera pas. | Fournir une **spécification OpenAPI (Swagger)** au scanner ou maintenir une liste exhaustive des routes à tester dans le script de supervision. |
+
+---
