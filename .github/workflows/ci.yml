@@ -1,3 +1,4 @@
+#Le pipeline se lance automatiquement quand tu fais un push sur la branche main ou vuln-demo
 name: DevSecOps Pipeline
 
 on:
@@ -8,6 +9,7 @@ on:
 
 jobs:
   # JOB 1 : Tests Unitaires
+  #Vérifie que le code fonctionne techniquement.
   unit-tests:
     runs-on: ubuntu-latest
     steps:
@@ -31,13 +33,15 @@ jobs:
       - uses: actions/checkout@v4
 
       # 1. GITLEAKS (Secrets)
+      #Scanne tout l'historique Git pour voir si on a laissé traîner des mots de passe ou clés API.
       - name: Gitleaks Secret Scan
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: false
+        continue-on-error: false #si un secret est trouvé, le pipeline s'arrête net.
 
-      # 2. SEMGREP (Code) - Version Corrigée
+      # 2. SEMGREP (Code)
+      #Installe Semgrep et analyse les fichiers Python pour trouver des failles de code
       - name: Semgrep Code Scan
         run: |
           pip install semgrep
@@ -59,11 +63,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # BUILD
+      #Fabrique l'image Docker de l'application.
       - name: Build Docker Image
         run: docker compose -f compose.staging.yml build
 
       # 3. TRIVY (Console - Bloquant)
+      #Si une faille critique est trouvée dans l'image le pipeline s'arrête.
       - name: Run Trivy Console Scan
         uses: aquasecurity/trivy-action@master
         with:
@@ -94,6 +99,7 @@ jobs:
           path: trivy-report.json
 
       # DEPLOY
+      #Lance le site web dans un serveur temporaire et vérifie qu'il répond "OK" (smoke.sh).
       - name: Start Staging Environment
         run: docker compose -f compose.staging.yml up -d
 
@@ -106,6 +112,7 @@ jobs:
           BASE_URL: http://localhost:5000
 
       # 4. ZAP (DAST)
+      # Attaque le site qui tourne comme un hacker pour trouver des problèmes de configuration
       - name: ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
